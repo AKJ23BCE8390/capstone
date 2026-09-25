@@ -1,25 +1,34 @@
+import os
 import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
+from client.evaluate import evaluate_model
 
-def evaluate_model(model, dataloader, criterion, device):
-    """Evaluates the model on test/validation set and computes loss/accuracy."""
-    model.eval()
-    running_loss = 0.0
-    correct = 0
-    total = 0
 
-    with torch.no_grad():
-        for images, labels in dataloader:
-            images = images.to(device)
-            labels = labels.squeeze().long().to(device)
+def run_baseline_evaluation(model: nn.Module, config: dict, device: torch.device) -> dict:
+    """Evaluates the saved baseline model against centralized test tensors."""
+    test_path = os.path.join(config["dataset"]["centralized_dir"], "test.pt")
+    if not os.path.exists(test_path):
+        raise FileNotFoundError(f"Test tensor missing: {test_path}")
 
-            outputs = model(images)
-            loss = criterion(outputs, labels)
+    test_data = torch.load(test_path)
+    test_ds = TensorDataset(test_data["images"], test_data["labels"])
+    test_loader = DataLoader(
+        test_ds, batch_size=config["training"]["batch_size"], shuffle=False
+    )
 
-            running_loss += loss.item() * images.size(0)
-            _, preds = torch.max(outputs, 1)
-            correct += torch.sum(preds == labels.data).item()
-            total += labels.size(0)
+    ckpt_path = os.path.join(
+        config["paths"]["checkpoint_dir"], config["paths"]["model_save_name"]
+    )
+    model.load_state_dict(torch.load(ckpt_path, map_location=device))
 
-    total_loss = running_loss / total
-    total_acc = correct / total
-    return total_loss, total_acc
+    criterion = nn.CrossEntropyLoss()
+    test_loss, test_acc, y_true, y_pred = evaluate_model(model, test_loader, criterion, device)
+
+    print(f"\n--- Baseline Centralized Test Evaluation ---")
+    print(f"Test Loss: {test_loss:.4f} | Test Accuracy: {test_acc*100:.2f}%")
+
+    return {
+        "test_loss": test_loss,
+        "test_accuracy": test_acc
+    }

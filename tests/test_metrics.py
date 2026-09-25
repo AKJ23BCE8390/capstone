@@ -1,35 +1,67 @@
-import os
-import sys
+import pytest
 import torch
+import numpy as np
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from ml.metrics import (
+    calculate_accuracy,
+    calculate_precision,
+    calculate_recall,
+    calculate_f1,
+    generate_confusion_matrix,
+    evaluate_all_metrics
+)
 
-from client.data.dataset import load_medmnist_splits
-from client.model.cnn import LocalClientCNN
-from client.evaluate import evaluate_client_model
 
-def test_metrics_and_evaluation():
-    device = torch.device("cpu")
-    _, _, test_ds = load_medmnist_splits()
-    test_loader = torch.utils.data.DataLoader(test_ds, batch_size=32, shuffle=False)
+@pytest.fixture
+def dummy_predictions():
+    # Ground Truth: [0, 0, 1, 1, 1]
+    # Predictions : [0, 1, 1, 1, 0]
+    # TP=2 (index 2,3), TN=1 (index 0), FP=1 (index 1), FN=1 (index 4)
+    y_true = torch.tensor([0, 0, 1, 1, 1])
+    y_pred = torch.tensor([0, 1, 1, 1, 0])
+    return y_true, y_pred
 
-    model = LocalClientCNN(in_channels=1, num_classes=2).to(device)
-    criterion = torch.nn.CrossEntropyLoss()
 
-    metrics = evaluate_client_model(model, test_loader, criterion, device)
+def test_accuracy(dummy_predictions):
+    y_true, y_pred = dummy_predictions
+    acc = calculate_accuracy(y_true, y_pred)
+    assert acc == pytest.approx(0.60, 0.01)
 
-    print("\n--- Evaluation Metrics Engine Test Results ---")
-    print(f"Test Loss:        {metrics['loss']:.4f}")
-    print(f"Test Accuracy:    {metrics['accuracy']*100:.2f}%")
-    print(f"Precision:        {metrics['precision']:.4f}")
-    print(f"Recall (Sens.):   {metrics['recall']:.4f}")
-    print(f"F1 Score:         {metrics['f1_score']:.4f}")
-    print(f"Specificity:      {metrics['specificity']:.4f}")
-    print(f"Confusion Matrix:\n{metrics['confusion_matrix'].numpy()}")
 
-    assert 0.0 <= metrics['accuracy'] <= 1.0, "Accuracy out of bounds."
-    assert 0.0 <= metrics['f1_score'] <= 1.0, "F1 score out of bounds."
-    print("\n✅ All Metrics & Client Evaluation Unit Tests Passed!")
+def test_precision(dummy_predictions):
+    y_true, y_pred = dummy_predictions
+    precision = calculate_precision(y_true, y_pred, average="binary")
+    # TP / (TP + FP) = 2 / 3 = 0.6667
+    assert precision == pytest.approx(0.6667, 0.01)
 
-if __name__ == "__main__":
-    test_metrics_and_evaluation()
+
+def test_recall(dummy_predictions):
+    y_true, y_pred = dummy_predictions
+    recall = calculate_recall(y_true, y_pred, average="binary")
+    # TP / (TP + FN) = 2 / 3 = 0.6667
+    assert recall == pytest.approx(0.6667, 0.01)
+
+
+def test_f1(dummy_predictions):
+    y_true, y_pred = dummy_predictions
+    f1 = calculate_f1(y_true, y_pred, average="binary")
+    # 2 * (P * R) / (P + R) = 2 * (2/3 * 2/3) / (4/3) = 0.6667
+    assert f1 == pytest.approx(0.6667, 0.01)
+
+
+def test_confusion_matrix(dummy_predictions):
+    y_true, y_pred = dummy_predictions
+    cm = generate_confusion_matrix(y_true, y_pred)
+    # [[TN, FP], [FN, TP]] -> [[1, 1], [1, 2]]
+    assert cm == [[1, 1], [1, 2]]
+
+
+def test_evaluate_all_metrics(dummy_predictions):
+    y_true, y_pred = dummy_predictions
+    results = evaluate_all_metrics(y_true, y_pred, average="binary")
+    
+    assert "accuracy" in results
+    assert "precision" in results
+    assert "recall" in results
+    assert "f1_score" in results
+    assert "confusion_matrix" in results

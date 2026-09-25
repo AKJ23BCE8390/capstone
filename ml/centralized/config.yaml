@@ -1,17 +1,20 @@
 dataset:
-  name: "pneumoniamnist"
+  name: "PneumoniaMNIST"
+  centralized_dir: "./data/centralized"
   image_size: 64
-  channels: 1
+  in_channels: 1
   num_classes: 2
-  batch_size: 32
-  raw_dir: "./data/raw"
-
-model:
-  architecture: "resnet18"
-  pretrained: true
 
 training:
-  epochs: 15
-  learning_rate: 0.001
+  batch_size: 32
+  epochs: 25
+  optimizer: "adamw"          # Upgraded from standard Adam
+  learning_rate: 0.0003       # Fine-tuned for ResNet-18 stability
   weight_decay: 0.0001
   seed: 42
+  use_scheduler: true        # Enable CosineAnnealingLR
+
+paths:
+  checkpoint_dir: "./models/checkpoints"
+  model_save_name: "centralized_baseline.pt"
+  metrics_save_name: "baseline_metrics.json"

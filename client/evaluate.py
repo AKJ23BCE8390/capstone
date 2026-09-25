@@ -1,52 +1,50 @@
 import torch
 import torch.nn as nn
-from ml.metrics.accuracy import calculate_accuracy
-from ml.metrics.precision import calculate_precision
-from ml.metrics.recall import calculate_recall
-from ml.metrics.f1 import calculate_f1
-from ml.metrics.confusion_matrix import get_confusion_matrix, calculate_specificity
+from torch.utils.data import DataLoader
+from typing import Dict, Tuple
 
-def evaluate_client_model(model: nn.Module, dataloader: torch.utils.data.DataLoader, criterion: nn.Module, device: torch.device) -> dict:
+
+def evaluate_model(
+    model: nn.Module,
+    data_loader: DataLoader,
+    criterion: nn.Module,
+    device: torch.device
+) -> Tuple[float, float, torch.Tensor, torch.Tensor]:
     """
-    Standardized client-side model evaluation function.
-    
-    Returns:
-        Dict containing loss, accuracy, precision, recall, f1_score, specificity, and confusion_matrix.
+    Evaluates a model performance returning Loss, Accuracy, True Labels, and Predictions.
     """
+    model.to(device)
     model.eval()
+
     running_loss = 0.0
+    correct = 0
+    total = 0
+
     all_preds = []
     all_targets = []
 
     with torch.no_grad():
-        for images, labels in dataloader:
-            images = images.to(device)
-            labels = labels.squeeze().long().to(device)
+        for images, labels in data_loader:
+            images, labels = images.to(device), labels.to(device)
+            if labels.ndim > 1 and labels.shape[1] == 1:
+                labels = labels.squeeze(1).long()
 
             outputs = model(images)
             loss = criterion(outputs, labels)
 
             running_loss += loss.item() * images.size(0)
-            all_preds.append(outputs.cpu())
+            _, preds = torch.max(outputs, 1)
+
+            correct += torch.sum(preds == labels.data).item()
+            total += labels.size(0)
+
+            all_preds.append(preds.cpu())
             all_targets.append(labels.cpu())
 
-    y_pred = torch.cat(all_preds, dim=0)
-    y_true = torch.cat(all_targets, dim=0)
+    avg_loss = running_loss / max(total, 1)
+    accuracy = correct / max(total, 1)
 
-    total_loss = running_loss / len(y_true)
-    acc = calculate_accuracy(y_pred, y_true)
-    prec = calculate_precision(y_pred, y_true)
-    rec = calculate_recall(y_pred, y_true)
-    f1 = calculate_f1(y_pred, y_true)
-    spec = calculate_specificity(y_pred, y_true)
-    cm = get_confusion_matrix(y_pred, y_true)
+    y_pred = torch.cat(all_preds)
+    y_true = torch.cat(all_targets)
 
-    return {
-        "loss": total_loss,
-        "accuracy": acc,
-        "precision": prec,
-        "recall": rec,
-        "f1_score": f1,
-        "specificity": spec,
-        "confusion_matrix": cm
-    }
+    return avg_loss, accuracy, y_true, y_pred
