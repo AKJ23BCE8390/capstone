@@ -1,0 +1,26 @@
+experiment:
+  id: "EXP-03"
+  name: "non_iid_fl"
+  rounds: 50
+  num_clients: 4
+
+data:
+  dataset_name: "PneumoniaMNIST"
+  clients_dir: "./data/clients"
+  split_type: "dirichlet"
+  dirichlet_alpha: 0.5
+  batch_size: 32
+  image_size: 64
+
+model:
+  architecture: "MedicalResNet18"
+  in_channels: 1
+  num_classes: 2
+
+training:
+  local_epochs: 5
+  learning_rate: 0.001
+  weight_decay: 0.0001
+
+privacy:
+  enabled: false
