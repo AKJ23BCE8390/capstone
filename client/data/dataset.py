@@ -1,20 +1,38 @@
 import os
-import medmnist
-from medmnist import INFO
+import torch
+from torch.utils.data import Dataset
+from medmnist import PneumoniaMNIST
 from client.data.preprocessing import get_data_transforms
 
-def load_medmnist_splits(dataset_name="pneumoniamnist", image_size=64, root_dir="./data/raw"):
-    """
-    Downloads and loads the PneumoniaMNIST train, validation, and test dataset splits.
-    """
-    os.makedirs(root_dir, exist_ok=True)
-    info = INFO[dataset_name]
-    DataClass = getattr(medmnist, info['python_class'])
 
-    train_tf, eval_tf = get_data_transforms(image_size=image_size)
+class PneumoniaDataset(Dataset):
+    def __init__(self, split="train", download=True, root="./data/raw"):
+        train_tf, eval_tf = get_data_transforms(image_size=64)
+        transform = train_tf if split == "train" else eval_tf
 
-    train_dataset = DataClass(split='train', transform=train_tf, download=True, root=root_dir)
-    val_dataset = DataClass(split='val', transform=eval_tf, download=True, root=root_dir)
-    test_dataset = DataClass(split='test', transform=eval_tf, download=True, root=root_dir)
+        self.medmnist_ds = PneumoniaMNIST(
+            split=split, download=download, root=root, transform=transform
+        )
 
-    return train_dataset, val_dataset, test_dataset
+        images = []
+        labels = []
+        for img, lbl in self.medmnist_ds:
+            images.append(img)
+            labels.append(torch.tensor(lbl, dtype=torch.long))
+
+        self.images = torch.stack(images)
+        self.labels = torch.stack(labels)
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        return self.images[idx], self.labels[idx]
+
+
+def load_medmnist_splits(data_dir="./data/raw"):
+    os.makedirs(data_dir, exist_ok=True)
+    train_ds = PneumoniaDataset(split="train", download=True, root=data_dir)
+    val_ds = PneumoniaDataset(split="val", download=True, root=data_dir)
+    test_ds = PneumoniaDataset(split="test", download=True, root=data_dir)
+    return train_ds, val_ds, test_ds

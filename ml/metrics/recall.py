@@ -1,13 +1,18 @@
 import torch
+import numpy as np
+from typing import Union
+from sklearn.metrics import recall_score
 
-def calculate_recall(y_pred: torch.Tensor, y_true: torch.Tensor, pos_label: int = 1) -> float:
-    """Calculates recall (Sensitivity) for the specified positive class."""
-    if y_pred.ndim > 1 and y_pred.size(1) > 1:
-        preds = torch.argmax(y_pred, dim=1)
-    else:
-        preds = y_pred
 
-    tp = ((preds == pos_label) & (y_true == pos_label)).sum().item()
-    fn = ((preds != pos_label) & (y_true == pos_label)).sum().item()
+def calculate_recall(
+    y_true: Union[torch.Tensor, np.ndarray], 
+    y_pred: Union[torch.Tensor, np.ndarray],
+    average: str = "binary"
+) -> float:
+    """Computes recall score across ground truth and predictions."""
+    if isinstance(y_true, torch.Tensor):
+        y_true = y_true.cpu().numpy()
+    if isinstance(y_pred, torch.Tensor):
+        y_pred = y_pred.cpu().numpy()
 
-    return tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    return float(recall_score(y_true, y_pred, average=average, zero_division=0))

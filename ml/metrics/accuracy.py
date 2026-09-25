@@ -1,12 +1,20 @@
 import torch
+import numpy as np
+from typing import Union
 
-def calculate_accuracy(y_pred: torch.Tensor, y_true: torch.Tensor) -> float:
-    """Calculates top-1 classification accuracy."""
-    if y_pred.ndim > 1 and y_pred.size(1) > 1:
-        preds = torch.argmax(y_pred, dim=1)
-    else:
-        preds = y_pred
 
-    correct = (preds == y_true).sum().item()
-    total = y_true.numel()
-    return correct / total if total > 0 else 0.0
+def calculate_accuracy(
+    y_true: Union[torch.Tensor, np.ndarray], 
+    y_pred: Union[torch.Tensor, np.ndarray]
+) -> float:
+    """Computes overall classification accuracy."""
+    if isinstance(y_true, torch.Tensor):
+        y_true = y_true.cpu().numpy()
+    if isinstance(y_pred, torch.Tensor):
+        y_pred = y_pred.cpu().numpy()
+
+    if len(y_true) == 0:
+        return 0.0
+
+    correct = np.sum(y_true == y_pred)
+    return float(correct / len(y_true))

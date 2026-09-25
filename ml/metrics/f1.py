@@ -1,12 +1,18 @@
 import torch
-from ml.metrics.precision import calculate_precision
-from ml.metrics.recall import calculate_recall
+import numpy as np
+from typing import Union
+from sklearn.metrics import f1_score
 
-def calculate_f1(y_pred: torch.Tensor, y_true: torch.Tensor, pos_label: int = 1) -> float:
-    """Calculates binary F1-Score."""
-    precision = calculate_precision(y_pred, y_true, pos_label)
-    recall = calculate_recall(y_pred, y_true, pos_label)
 
-    if (precision + recall) == 0:
-        return 0.0
-    return 2.0 * (precision * recall) / (precision + recall)
+def calculate_f1(
+    y_true: Union[torch.Tensor, np.ndarray], 
+    y_pred: Union[torch.Tensor, np.ndarray],
+    average: str = "binary"
+) -> float:
+    """Computes F1 score across ground truth and predictions."""
+    if isinstance(y_true, torch.Tensor):
+        y_true = y_true.cpu().numpy()
+    if isinstance(y_pred, torch.Tensor):
+        y_pred = y_pred.cpu().numpy()
+
+    return float(f1_score(y_true, y_pred, average=average, zero_division=0))
