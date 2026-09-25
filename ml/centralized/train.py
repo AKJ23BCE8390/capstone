@@ -27,7 +27,7 @@ def load_centralized_data(data_dir: str) -> Tuple[TensorDataset, TensorDataset]:
 
 
 def train_centralized_model(model: nn.Module, config: dict, device: torch.device) -> dict:
-    """Executes full centralized baseline training loop."""
+    """Executes full centralized baseline training loop with tuned hyperparameter execution."""
     data_dir = config["dataset"]["centralized_dir"]
     train_ds, val_ds = load_centralized_data(data_dir)
 
@@ -39,11 +39,25 @@ def train_centralized_model(model: nn.Module, config: dict, device: torch.device
     )
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(
-        model.parameters(),
-        lr=config["training"]["learning_rate"],
-        weight_decay=config["training"]["weight_decay"]
-    )
+    
+    # Optimizer Selection (AdamW tuning)
+    if config["training"].get("optimizer", "adam").lower() == "adamw":
+        optimizer = optim.AdamW(
+            model.parameters(),
+            lr=config["training"]["learning_rate"],
+            weight_decay=config["training"]["weight_decay"]
+        )
+    else:
+        optimizer = optim.Adam(
+            model.parameters(),
+            lr=config["training"]["learning_rate"],
+            weight_decay=config["training"]["weight_decay"]
+        )
+
+    # Cosine Annealing Learning Rate Scheduler
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=config["training"]["epochs"]
+    ) if config["training"].get("use_scheduler", False) else None
 
     model.to(device)
     best_acc = 0.0
@@ -66,6 +80,9 @@ def train_centralized_model(model: nn.Module, config: dict, device: torch.device
 
             running_loss += loss.item() * images.size(0)
 
+        if scheduler:
+            scheduler.step()
+
         train_loss = running_loss / len(train_ds)
         val_loss, val_acc, _, _ = evaluate_model(model, val_loader, criterion, device)
 
@@ -78,11 +95,10 @@ def train_centralized_model(model: nn.Module, config: dict, device: torch.device
             best_acc = val_acc
             best_stats = {
                 "epoch": epoch,
-                "best_accuracy": best_acc,
+                "best_val_accuracy": best_acc,
                 "train_loss": train_loss,
                 "val_loss": val_loss
             }
-            # Save checkpoint state dict
             os.makedirs(config["paths"]["checkpoint_dir"], exist_ok=True)
             ckpt_path = os.path.join(
                 config["paths"]["checkpoint_dir"], config["paths"]["model_save_name"]

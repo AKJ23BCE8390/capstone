@@ -7,10 +7,12 @@ dataset:
 
 training:
   batch_size: 32
-  epochs: 15
-  learning_rate: 0.001
+  epochs: 25
+  optimizer: "adamw"          # Upgraded from standard Adam
+  learning_rate: 0.0003       # Fine-tuned for ResNet-18 stability
   weight_decay: 0.0001
   seed: 42
+  use_scheduler: true        # Enable CosineAnnealingLR
 
 paths:
   checkpoint_dir: "./models/checkpoints"
