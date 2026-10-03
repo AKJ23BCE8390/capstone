@@ -1,6 +1,7 @@
 import flwr as fl
 import logging
-from server.strategy import TelemetryFedAvg
+from strategy import TelemetryFedAvg
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("CentralServerOrchestrator")

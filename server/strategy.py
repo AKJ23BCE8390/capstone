@@ -6,7 +6,8 @@ import flwr as fl
 from flwr.common import Parameters, Scalar, FitRes, parameters_to_ndarrays, ndarrays_to_parameters
 
 from server.straggler import StragglerEnforcer
-from server.aggregator import compute_weighted_average
+from aggregator import compute_weighted_average
+
 
 logger = logging.getLogger("TelemetryFedAvgStrategy")
 
