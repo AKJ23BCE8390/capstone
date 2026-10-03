@@ -1,22 +1,22 @@
-import logging
-from typing import Dict, Any
+import numpy as np
+from typing import List, Tuple
 
-logger = logging.getLogger("ServerAuth")
+class SecureWeightAggregator:
+    @staticmethod
+    def weighted_average(results: List[Tuple[List[np.ndarray], int]]) -> List[np.ndarray]:
+        """
+        Calculates a custom weighted average over standard NumPy arrays
+        serving as a backup vector check if framework layers experience disruptions.
+        """
+        if not results:
+            return []
 
-class ConnectionAuthenticator:
-    def __init__(self, expected_token: str = "HOSPITAL_SECURE_FL_2026"):
-        """
-        Authenticates incoming client registration handshakes based on token parameters.
-        """
-        self.expected_token = expected_token
+        total_examples = sum([num_examples for _, num_examples in results])
+        weighted_weights = [np.zeros_like(w) for w in results[0][0]]
 
-    def validate_client(self, metadata: Dict[str, Any]) -> bool:
-        """
-        Verifies client authentication credentials.
-        """
-        client_token = metadata.get("auth_token")
-        if client_token == self.expected_token:
-            logger.info("Client handshake authentication verified successfully.")
-            return True
-        logger.warning("Unauthorized client connection attempt blocked.")
-        return False
+        for weights, num_examples in results:
+            weight_factor = num_examples / total_examples
+            for i, layer in enumerate(weights):
+                weighted_weights[i] += layer * weight_factor
+
+        return weighted_weights

@@ -1,70 +1,69 @@
-import time
-import requests
-import logging
-from typing import List, Tuple, Union, Dict, Optional
 import flwr as fl
-from flwr.common import Parameters, Scalar, FitRes, parameters_to_ndarrays, ndarrays_to_parameters
+import requests
+from typing import List, Tuple, Dict, Optional, Union
+from flwr.common import Metrics, FitRes, Parameters, Scalar, EvaluateRes
 
-from server.straggler import StragglerEnforcer
-from aggregator import compute_weighted_average
-
-
-logger = logging.getLogger("TelemetryFedAvgStrategy")
-
-class TelemetryFedAvg(fl.server.strategy.FedAvg):
-    def __init__(self, api_url: str = "http://localhost:5000/api/metrics", *args, **kwargs):
+class CustomTelemetryStrategy(fl.server.strategy.FedAvg):
+    def __init__(self, dashboard_url: str, *args, **kwargs):
+        """
+        Custom Federated Aggregation Strategy tracking performance
+        and streaming metrics to a centralized dashboard.
+        """
         super().__init__(*args, **kwargs)
-        self.api_url = api_url
-        self.straggler_guard = StragglerEnforcer(timeout_seconds=30.0, min_required_clients=3)
+        self.dashboard_url = dashboard_url
 
     def aggregate_fit(
         self,
         server_round: int,
         results: List[Tuple[fl.server.client_proxy.ClientProxy, FitRes]],
-        failures: List[Union[Tuple[fl.server.client_proxy.ClientProxy, FitRes], BaseException]],
+        failures: List[Union[Tuple[fl.server.client_proxy.ClientProxy, FitRes], BaseException]]
     ) -> Tuple[Optional[Parameters], Dict[str, Scalar]]:
         
-        start_time = time.time()
-        # Enforce defensive timing validations against slow nodes
-        filtered_results = self.straggler_guard.intercept_fit_responses(start_time, results)
+        # Call the base FedAvg aggregation implementation
+        aggregated_parameters, aggregated_metrics = super().aggregate_fit(server_round, results, failures)
+        
+        if not results:
+            return aggregated_parameters, aggregated_metrics
 
-        if not filtered_results:
-            return None, {}
+        total_examples = 0
+        running_accuracy = 0.0
+        running_loss = 0.0
+        max_epsilon = 0.0
+        successful_clients = len(results)
+        failed_clients = len(failures)
 
-        # Deconstruct network parameters to pure NumPy arrays for processing
-        weights_results = [
-            (parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples)
-            for _, fit_res in filtered_results
-        ]
+        # Safely compute weighted averages from reporting nodes
+        for _, fit_res in results:
+            num_examples = fit_res.num_examples
+            total_examples += num_examples
+            
+            # Extract client metrics (handles cases where Person 1/3 keys are missing)
+            running_accuracy += fit_res.metrics.get("accuracy", 0.0) * num_examples
+            running_loss += fit_res.metrics.get("loss", 0.0) * num_examples
+            max_epsilon = max(max_epsilon, fit_res.metrics.get("epsilon", 0.0))
 
-        # Calculate combined node weights via localized array equations
-        aggregated_ndarrays = compute_weighted_average(weights_results)
-        parameters_aggregated = ndarrays_to_parameters(aggregated_ndarrays)
+        global_accuracy = running_accuracy / total_examples if total_examples > 0 else 0.0
+        global_loss = running_loss / total_examples if total_examples > 0 else 0.0
 
-        # Compute summary metrics metrics to pass across telemetry pipelines
-        total_acc, total_loss, count = 0.0, 0.0, 0
-        for _, fit_res in filtered_results:
-            if fit_res.metrics:
-                total_acc += float(fit_res.metrics.get("accuracy", 0.0))
-                total_loss += float(fit_res.metrics.get("loss", 0.0))
-                count += 1
-
-        avg_acc = (total_acc / count) if count > 0 else 0.0
-        avg_loss = (total_loss / count) if count > 0 else 0.0
-
-        # Package data transmission schema for Person 4's dashboard backend API
-        telemetry_packet = {
-            "round": server_round,
-            "accuracy": avg_acc,
-            "loss": avg_loss,
-            "active_clients": len(filtered_results),
-            "failures": len(failures)
+        # Package payload for Person 4's Node/Express Telemetry API
+        telemetry_data = {
+            "round": int(server_round),
+            "accuracy": float(round(global_accuracy, 4)),
+            "loss": float(round(global_loss, 4)),
+            "epsilon": float(round(max_epsilon, 2)),
+            "active_nodes": int(successful_clients),
+            "dropped_nodes": int(failed_clients)
         }
 
+        # Non-blocking network API dispatch step
         try:
-            requests.post(self.api_url, json=telemetry_packet, timeout=2.0)
-            logger.info(f"Round {server_round} telemetry forwarded to dashboard server: {telemetry_packet}")
-        except Exception as e:
-            logger.error(f"Failed to transmit backend data updates: {e}")
+            print(f"[Network Engine] Sending Round {server_round} statistics to Dashboard...")
+            response = requests.post(self.dashboard_url, json=telemetry_data, timeout=3)
+            if response.status_code == 200:
+                print("[Network Engine] Telemetry data committed successfully.")
+            else:
+                print(f"[Network Engine] Dashboard API warning: Status code {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            print(f"[Network Engine] Telemetry Pipeline Offline (API Unreachable). Error: {e}")
 
-        return parameters_aggregated, {"round_loss": avg_loss, "round_accuracy": avg_acc}
+        return aggregated_parameters, aggregated_metrics

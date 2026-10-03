@@ -1,48 +1,38 @@
-import logging
-from collections import OrderedDict
+import sys
 import flwr as fl
 import numpy as np
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("HospitalClientNode")
-
-class HospitalFlowerClient(fl.client.NumPyClient):
-    def __init__(self, client_id: int):
+class HospitalClient(fl.client.NumPyClient):
+    def __init__(self, client_id: str):
         self.client_id = client_id
-        # Creates mock local array structures to isolate framework setup until Person 1 delivers code
-        self.mock_weights = [np.random.randn(3, 3), np.zeros((3,))]
-        logger.info(f"Hospital Client Node {self.client_id} successfully initialized.")
+        # Define a basic 2-layer linear shape array to satisfy initial shape handshake checks
+        self.weights = [np.zeros((10, 2), dtype=np.float32), np.zeros((2,), dtype=np.float32)]
+        print(f"[Client Initialize] Node {self.client_id} successfully loaded into memory.")
+        
+    def get_parameters(self, config):
+        return self.weights
 
-    def get_parameters(self, config) -> list:
-        logger.info("Extracting framework array parameters snapshot.")
-        return self.mock_weights
+    def set_parameters(self, parameters):
+        self.weights = parameters
 
-    def set_parameters(self, parameters: list):
-        logger.info("Updating local configuration state parameters.")
-        self.mock_weights = parameters
-
-    def fit(self, parameters: list, config: dict) -> tuple:
-        """
-        Executes local processing scripts behind corporate security boundary firewalls.
-        """
-        logger.info(f"Client {self.client_id}: Fit request received. Running local calculations...")
+    def fit(self, parameters, config):
         self.set_parameters(parameters)
+        print(f"\n[Client {self.client_id}] Successfully pulled global model configuration payload...")
+        print(f"[Client {self.client_id}] Processing local training round configurations...")
         
-        # Simulated metric logs matching training signatures
-        simulated_loss = float(np.random.uniform(0.1, 0.5))
-        simulated_acc = float(np.random.uniform(0.75, 0.95))
-        
-        # Returns updated layers, local training pool sample counts, and performance logs
-        return self.get_parameters(config={}), 100, {"loss": simulated_loss, "accuracy": simulated_acc}
+        # Output mock metrics back up to your custom strategy pipeline
+        return self.get_parameters(config={}), 100, {"accuracy": 0.88, "loss": 0.24, "epsilon": 1.5}
 
-    def evaluate(self, parameters: list, config: dict) -> tuple:
-        """
-        Validates model configuration state criteria against unique demographic subsets.
-        """
-        logger.info(f"Client {self.client_id}: Validation evaluation triggered.")
+    def evaluate(self, parameters, config):
         self.set_parameters(parameters)
-        
-        simulated_val_loss = float(np.random.uniform(0.15, 0.6))
-        simulated_val_acc = float(np.random.uniform(0.7, 0.9))
-        
-        return simulated_val_loss, 20, {"accuracy": simulated_val_acc}
+        return 0.24, 100, {"accuracy": 0.88}
+
+if __name__ == "__main__":
+    # Fallback to default if no argument is passed explicitly
+    cid = sys.argv[1] if len(sys.argv) > 1 else "hospital_generic"
+    
+    print(f"Connecting to Orchestrator Hub as client node ID: {cid}...")
+    fl.client.start_numpy_client(
+        server_address="127.0.0.1:8080", 
+        client=HospitalClient(cid)
+    )
